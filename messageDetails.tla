@@ -136,17 +136,7 @@ ReadReq2 ==
                 /\ LET maxTMessage == CHOOSE x \in ackMessages : \A ackM \in ackMessages: x.t >= ackM.t IN 
                     /\ SendWriteReq(initiator, maxTMessage.v, maxTMessage.t, u, "read")
                     /\ lastTimestamp' = IF maxTMessage.t > lastTimestamp THEN maxTMessage.t ELSE lastTimestamp
-                    /\ processorTimestamps' = [processorTimestamps EXCEPT ![initiator] = maxTMessage.t]
-                    /\ processorValues' = [processorValues EXCEPT ![initiator] = maxTMessage.v]
-                    /\ UNCHANGED << lastOperationNumber >>
-
-ReadReq ==
-    /\ lastOperationNumber < MaxOperationsCount
-    /\ \E p \in Processors:
-        SendReadReq(p, "read", lastOperationNumber + 1)
-    /\ lastOperationNumber' = lastOperationNumber + 1
-    /\ UNCHANGED << processorTimestamps, processorValues, lastTimestamp >>
-
+                    /\ UNCHANGED << lastOperationNumber, processorTimestamps, processorValues >>
 
 Next == 
     \/ WriteReq1
@@ -161,6 +151,7 @@ SendMessage(m) == messages' = messages \cup {m}
 
 Spec == Init /\ [][Next]_vars 
              /\ WF_vars(AckWriteReq)
+             /\ WF_vars(AckReadReq)
 
 NewerValuePropagates ==
     \A p1, p2 \in Processors:
