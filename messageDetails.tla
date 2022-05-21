@@ -47,9 +47,12 @@ SendWriteReq(p, v, t, u, goal) ==
 
 SendAckWReq(p, to, v, t, u, g) ==
     /\ messages' = messages \cup [sender: { p }, receiver: { to }, type: { "ackW" }, v: { v }, t: { t }, u: { u }, goal: { g }]
-    /\ processorTimestamps' = [processorTimestamps EXCEPT ![p] = t]
-    /\ processorValues' = [processorValues EXCEPT ![p] = v]
-    /\ UNCHANGED << lastTimestamp, lastOperationNumber >>
+    /\ IF t > processorTimestamps[p] THEN 
+        /\ processorTimestamps' = [processorTimestamps EXCEPT ![p] = t]
+        /\ processorValues' = [processorValues EXCEPT ![p] = v]
+        /\ UNCHANGED << lastTimestamp, lastOperationNumber >>
+        ELSE 
+        /\ UNCHANGED << processorTimestamps, processorValues, lastTimestamp, lastOperationNumber >>
 
 SendAckRReq(p, to, v, t, u, g) ==
     /\ messages' = messages \cup [sender: { p }, receiver: { to }, type: { "ackR" }, v: { v }, t: { t }, u: { u }, goal: { g }]
@@ -63,7 +66,9 @@ AckWriteReq ==
         /\ \E m \in messages:
             /\ m.receiver = p
             /\ m.type = "write"
-            /\ m.t > processorTimestamps[p]
+            \* Not already sent
+            /\ ~(\E d \in messages: 
+                d.sender = p /\ d.type = "ackW" /\ d.u = m.u)
             /\ SendAckWReq(p, m.sender, m.v, m.t, m.u, m.goal)
 
 
@@ -74,7 +79,7 @@ AckReadReq ==
             /\ m.type = "read"
             \* Not already sent
             /\ ~(\E d \in messages: 
-                d.sender = p /\ d.type = m.type /\ d.u = m.u)
+                d.sender = p /\ d.type = "ackR" /\ d.u = m.u)
             /\ SendAckRReq(p, m.sender, processorValues[p], processorTimestamps[p], m.u, m.goal)
 
 WriteReq1 ==
@@ -152,6 +157,10 @@ SendMessage(m) == messages' = messages \cup {m}
 Spec == Init /\ [][Next]_vars 
              /\ WF_vars(AckWriteReq)
              /\ WF_vars(AckReadReq)
+
+LastTimestampCorrect ==
+    \A p \in Processors:
+        processorTimestamps[p] <= lastTimestamp
 
 NewerValuePropagates ==
     \A p1, p2 \in Processors:
