@@ -13,8 +13,6 @@ VARIABLES messages,    \* The set of messages that have been sent.
 
 vars == << messages, processorTimestamps, processorValues, lastTimestamp, lastOperationNumber >> 
 
-\* https://github.com/tlaplus/DrTLAPlus/blob/master/Paxos/Paxos.tla
-
 MessagesType == 
     [sender: Processors, receiver: Processors, type: {"read"}, u: Nat, goal: {"read", "write"}] \cup 
     [sender: Processors, receiver: Processors, type: {"write"}, v: Values \cup { Default }, t: Nat, u: Nat, goal: {"read", "write"}] \cup 
@@ -66,7 +64,6 @@ AckWriteReq ==
             /\ m.receiver = p
             /\ m.type = "write"
             /\ m.t > processorTimestamps[p]
-
             /\ SendAckWReq(p, m.sender, m.v, m.t, m.u, m.goal)
 
 
@@ -78,7 +75,6 @@ AckReadReq ==
             \* Not already sent
             /\ ~(\E d \in messages: 
                 d.sender = p /\ d.type = m.type /\ d.u = m.u)
-
             /\ SendAckRReq(p, m.sender, processorValues[p], processorTimestamps[p], m.u, m.goal)
 
 WriteReq1 ==
@@ -113,33 +109,6 @@ WriteReq2 ==
                             /\ processorTimestamps' = [processorTimestamps EXCEPT ![initiator] = newT]
                             /\ processorValues' = [processorValues EXCEPT ![initiator] = v]
                             /\ UNCHANGED << lastOperationNumber >>
-
-\* Not needed as this doesn't change the state
-WriteReq3 ==
-        /\ \E initiator \in Processors, u \in 0..lastOperationNumber:
-            LET ackMessages == { 
-            ackM \in messages: 
-                /\ ackM.receiver = initiator
-                /\ ackM.type = "ackW"
-                /\ ackM.u = u
-                /\ ackM.goal = "write"
-            } IN
-                /\ \A p \in Processors \ { initiator }:
-                    /\ \E m \in ackMessages:
-                        /\ m.sender = p
-
-                /\ LET writeValue == 
-                    (CHOOSE m \in messages: m.u = u /\ m.sender = initiator /\ m.type = "write").v 
-                    IN 
-                    /\ LET ts == { x.t: x \in ackMessages } IN 
-                        LET newT == (CHOOSE t \in ts: \A tt \in ts: t >= tt) + 1 IN 
-                            LET v == CHOOSE vv \in Values: TRUE IN 
-                                /\ SendWriteReq(initiator, v, newT, u, "write")
-                                /\ lastTimestamp' = IF newT > lastTimestamp THEN newT ELSE lastTimestamp
-                                /\ processorTimestamps' = [processorTimestamps EXCEPT ![initiator] = newT]
-                                /\ processorValues' = [processorValues EXCEPT ![initiator] = v]
-                                /\ UNCHANGED << lastOperationNumber >>
-
 
 ReadReq1 ==
     /\ lastOperationNumber < MaxOperationsCount
@@ -191,6 +160,11 @@ SendMessage(m) == messages' = messages \cup {m}
 
 
 Spec == Init /\ [][Next]_vars 
+             /\ WF_vars(AckWriteReq)
+
+NewerValuePropagates ==
+    \A p1, p2 \in Processors:
+        (processorTimestamps[p1] > processorTimestamps[p2]) ~> (processorTimestamps[p1] <= processorTimestamps[p2])
 
 ------------------------------------------------------------------------------
 
@@ -207,6 +181,5 @@ chosenBar == {v \in Values : Chosen(v)}
 MessageDetailed == INSTANCE messageAbstract WITH chosen <- chosenBar
 
 THEOREM Refinement == Spec => MessageDetailed!Spec
-
 
 ==============================================================================
