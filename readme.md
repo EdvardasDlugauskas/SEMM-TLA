@@ -19,7 +19,7 @@ Here `u` - nonce, `v` - value of a process register, `t` - timestamp.
 
 **Write**:
 1. Send `read(u)` to all processes
-2. Wait until acknowledgement form a majority is received
+2. Wait until acknowledgement from a majority is received
 3. Set my `t` to `(max t + 1, id)`
 4. Send `write(v, t)` to all processes, wait for a response `ack(v, t)` from a majority of processes
 
