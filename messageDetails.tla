@@ -15,10 +15,10 @@ vars == << messages, processorTimestamps, processorValues, lastTimestamp, lastOp
 \* https://github.com/tlaplus/DrTLAPlus/blob/master/Paxos/Paxos.tla
 
 MessagesType == 
-    [sender: Processors, receiver: Processors, type: {"read"}, u: Nat, goal: {"read", "write"},] \cup 
+    [sender: Processors, receiver: Processors, type: {"read"}, u: Nat, goal: {"read", "write"}] \cup 
     [sender: Processors, receiver: Processors, type: {"write"}, v: Values \cup { Default }, t: Nat, u: Nat, goal: {"read", "write"}] \cup 
-    [sender: Processors, receiver: Processors, type: {"ackW"}, v: Values \cup { Default }, t: Nat, u: Nat] \cup        
-    [sender: Processors, receiver: Processors, type: {"ackR"}, v: Values \cup { Default }, t: Nat, u: Nat]            
+    [sender: Processors, receiver: Processors, type: {"ackW"}, v: Values \cup { Default }, t: Nat, u: Nat, goal: {"read", "write"}] \cup        
+    [sender: Processors, receiver: Processors, type: {"ackR"}, v: Values \cup { Default }, t: Nat, u: Nat, goal: {"read", "write"}]            
 
 TypeOK == 
     /\ messages \in SUBSET MessagesType
@@ -46,27 +46,36 @@ Read(reader) ==
                 /\ m.v = v
         \/ v = Default
 
-SendWriteReq(p, v) ==
-    LET newMessages == 
-        [sender: { p }, receiver: Processors \ { p }, type: {"write"}, v: { v }, t: {lastTimestamp + 1}, u: { lastOperationNumber }] 
+SendReadReq(p, goal) ==
+    LET newMessages == [sender: { p }, receiver: Processors \ { p }, type: {"read"}, u: { lastOperationNumber + 1 }, goal: { goal }]
     IN 
-        /\ lastTimestamp' = lastTimestamp + 1
+        /\ messages' = messages \cup newMessages
         /\ lastOperationNumber' = lastOperationNumber + 1
-        /\ processorTimestamps' = [processorTimestamps EXCEPT ![p] = lastTimestamp + 1]
+        /\ UNCHANGED << processorTimestamps, processorValues, lastTimestamp >>
+
+SendWriteReq(p, v, t, u, goal) ==
+    LET newMessages == 
+        [sender: { p }, receiver: Processors \ { p }, type: {"write"}, v: { v }, t: { t }, u: { u }, goal: { goal }] 
+    IN 
+        /\ lastTimestamp' = IF t > lastTimestamp THEN t ELSE lastTimestamp
+        /\ processorTimestamps' = [processorTimestamps EXCEPT ![p] = t]
         /\ processorValues' = [processorValues EXCEPT ![p] = v]
         /\ messages' = messages \cup newMessages
-        /\ UNCHANGED << >>
+        /\ UNCHANGED << lastOperationNumber >>
 
-WriteReq ==
-    /\ lastOperationNumber < MaxOperationsCount
-    /\ \E v \in Values, p \in Processors:
-        SendWriteReq(p, v)
 
-SendAckWReq(p, to, v, t, u) ==
-    /\ messages' = messages \cup [sender: { p }, receiver: { to }, type: { "ackW" }, v: { v }, t: { t }, u: { u }]
+SendAckWReq(p, to, v, t, u, g) ==
+    /\ messages' = messages \cup [sender: { p }, receiver: { to }, type: { "ackW" }, v: { v }, t: { t }, u: { u }, goal: { g }]
     /\ processorTimestamps' = [processorTimestamps EXCEPT ![p] = t]
     /\ processorValues' = [processorValues EXCEPT ![p] = v]
     /\ UNCHANGED << lastTimestamp, lastOperationNumber >>
+
+SendAckRReq(p, to, v, t, u, g) ==
+    /\ messages' = messages \cup [sender: { p }, receiver: { to }, type: { "ackR" }, v: { v }, t: { t }, u: { u }, goal: { g }]
+    /\ processorTimestamps' = [processorTimestamps EXCEPT ![p] = t]
+    /\ processorValues' = [processorValues EXCEPT ![p] = v]
+    /\ UNCHANGED << lastTimestamp, lastOperationNumber >>
+
 
 AckWriteReq ==
     /\ \E p \in Processors:
@@ -75,25 +84,8 @@ AckWriteReq ==
             /\ m.type = "write"
             /\ m.t > processorTimestamps[p]
 
-            /\ SendAckWReq(p, m.sender, m.v, m.t, m.u)
+            /\ SendAckWReq(p, m.sender, m.v, m.t, m.u, m.goal)
 
-SendReadReq(p) ==
-    LET newMessages == [sender: { p }, receiver: Processors \ { p }, type: {"read"}, u: { lastOperationNumber + 1 }]
-    IN 
-        /\ messages' = messages \cup newMessages
-        /\ lastOperationNumber' = lastOperationNumber + 1
-        /\ UNCHANGED << processorTimestamps, processorValues, lastTimestamp >>
-
-ReadReq ==
-    /\ lastOperationNumber < MaxOperationsCount
-    /\ \E p \in Processors:
-        SendReadReq(p)
-
-SendAckRReq(p, to, v, t, u) ==
-    /\ messages' = messages \cup [sender: { p }, receiver: { to }, type: { "ackR" }, v: { v }, t: { t }, u: { u }]
-    /\ processorTimestamps' = [processorTimestamps EXCEPT ![p] = t]
-    /\ processorValues' = [processorValues EXCEPT ![p] = v]
-    /\ UNCHANGED << lastTimestamp, lastOperationNumber >>
 
 AckReadReq ==
     /\ \E p \in Processors:
@@ -104,12 +96,45 @@ AckReadReq ==
             /\ ~(\E d \in messages: 
                 d.sender = p /\ d.type = m.type /\ d.u = m.u)
 
-            /\ SendAckRReq(p, m.sender, processorValues[p], processorTimestamps[p], m.u)
+            /\ SendAckRReq(p, m.sender, processorValues[p], processorTimestamps[p], m.u, m.goal)
 
 \* TODO: read message, ackRead, chosen impl
 
+WriteReq1 ==
+    /\ lastOperationNumber < MaxOperationsCount
+    /\ \E v \in Values, p \in Processors:
+        SendReadReq(p, "write")
+
+WriteReq2 ==
+    /\ \E initiator \in Processors, u \in 0..lastOperationNumber:
+        /\ LET ackMessages == { 
+            ackM \in messages: 
+                /\ ackM.receiver = initiator
+                /\ ackM.type = "ackR"
+                /\ ackM.u = u
+                /\ ackM.goal = "write"
+            } IN
+            /\ \A p \in Processors \ { initiator }:
+                /\ \E m \in ackMessages:
+                    /\ m.sender = p
+
+            \* Not already sent 
+            /\ ~\E m \in messages: m.sender = initiator /\ m.u = u /\ m.type = "write"
+
+            /\ LET ts == { x.t: x \in ackMessages } IN 
+                LET newT == (CHOOSE t \in ts: \A tt \in ts: t >= tt) + 1 IN 
+                    LET v == CHOOSE vv \in Values: TRUE IN 
+                        /\ SendWriteReq(initiator, v, newT, u, "write")
+
+
+ReadReq ==
+    /\ lastOperationNumber < MaxOperationsCount
+    /\ \E p \in Processors:
+        SendReadReq(p, "read")
+
 Next == 
-    \/ WriteReq
+    \/ WriteReq1
+    \/ WriteReq2
     \/ AckWriteReq
     \/ ReadReq
     \/ AckReadReq
