@@ -6,14 +6,18 @@ ACM: https://dl.acm.org/doi/10.1145/200836.200869
 
 Book: https://www.cs.yale.edu/homes/aspnes/pinewiki/SharedMemoryVsMessagePassing.html
 
-### Requirements (abstract spec)
+### Abstract goal
+
+ Our goal is to simulate a single atomic register, in the sense that no external observing seeing the sequence of invoke and response actions can distinguish the execution from the execution of an atomic register.
+
+### Algorithm
+
+Assumptions:
 - We have N processes, they form a complete network
 - Each process has a register that holds a value
 - One of N processes writes a value
   - The writer waits for the write operation to complete
   - After a successful write, either the written value or a newer value is returned
-
-### Algorithm
 
 Here `u` - nonce, `v` - value of a process register, `t` - timestamp.
 
