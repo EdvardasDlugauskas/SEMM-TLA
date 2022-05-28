@@ -12,7 +12,6 @@ VARIABLES messages,    \* The set of messages that have been sent.
 
 ASSUMPTION ValuesAssumption == Cardinality(Values) > 1 /\ IsFiniteSet(Values)
 ASSUMPTION ProcessorsAssumption == Cardinality(Processors) > 1 /\ IsFiniteSet(Processors)
-ASSUMPTION MaxOperationsCountAssumption == MaxOperationsCount \in Nat /\ MaxOperationsCount > 0
 
 vars == << messages, processorTimestamps, processorValues, lastTimestamp, lastOperationNumber >> 
 
@@ -34,7 +33,7 @@ Init ==
     /\ processorTimestamps = [p \in Processors |-> 0]
     /\ processorValues = [p \in Processors |-> Default]
     /\ lastTimestamp = 0
-    /\ lastOperationNumber = 0
+    /\ lastOperationNumber = 1
 
 SendReadReq(p, goal, u) ==
     LET newMessages == [sender: { p }, receiver: Processors \ { p }, type: {"read"}, u: { u }, goal: { goal }]
@@ -102,7 +101,6 @@ WriteReq2 ==
                 /\ ackM.u = u
                 /\ ackM.goal = "write"
             } IN
-                /\ ackMessages # {}
                 /\ \A p \in Processors \ { initiator }:
                     /\ \E m \in ackMessages:
                         /\ m.sender = p
@@ -135,7 +133,6 @@ ReadReq2 ==
                 /\ ackM.u = u
                 /\ ackM.goal = "read"
             } IN
-                /\ ackMessages # {}
                 /\ \A p \in Processors \ { initiator }:
                     /\ \E m \in ackMessages:
                         /\ m.sender = p
@@ -234,51 +231,6 @@ THEOREM SpecTypeOK == Spec => []TypeOK
         <2>q. QED BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6 DEF TypeOK, Next, WriteReq1, WriteReq2, ReadReq1, ReadReq2, AckWriteReq, AckReadReq        
         
     <1>q. QED BY <1>1, <1>2, PTL DEF Spec
-    
-    
-(*
-THEOREM SpecTypeOK == Spec => []TypeOK
-    <1>1. Init => TypeOK 
-        BY DEF Init, TypeOK
-    <1>2. TypeOK /\ [Next]_vars => TypeOK'
-        <2> SUFFICES ASSUME TypeOK, Next PROVE TypeOK' BY DEF TypeOK, vars
-        <2>1. CASE WriteReq1 BY <2>1 DEF WriteReq1, TypeOK, MessagesType, SendReadReq
-        <2>2. CASE WriteReq2 
-            <3> SUFFICES ASSUME TypeOK, WriteReq2 PROVE messages' \in SUBSET MessagesType
-                                    /\ processorTimestamps' \in [Processors -> Nat]
-                                    /\ processorValues' \in [Processors -> Values \cup {Default}]
-                                    /\ lastTimestamp' \in Nat
-                                    /\ lastOperationNumber' \in Nat
-            BY <2>2 DEF TypeOK, Next, vars
-            <3>1. messages' \in SUBSET MessagesType PROOF BY <2>2 DEF TypeOK, Next, WriteReq2, SendWriteReq
-            <3>2. processorTimestamps' \in [Processors -> Nat] PROOF BY <2>2 DEF TypeOK, Next, WriteReq2, SendWriteReq
-            <3>3. processorValues' \in [Processors -> Values \cup {Default}] PROOF BY <2>2 DEF TypeOK, Next, WriteReq2, SendWriteReq
-            <3>4. lastTimestamp' \in Nat PROOF BY <2>2 DEF TypeOK, Next, WriteReq2, SendWriteReq
-            <3>5. lastOperationNumber' \in Nat PROOF BY <2>2 DEF TypeOK, Next, WriteReq2, SendWriteReq
-            <3>q. QED BY <3>1, <3>2, <3>3, <3>4, <3>5
-        <2>3. CASE ReadReq1 BY <2>3 DEF ReadReq1, TypeOK, MessagesType, SendReadReq
-        <2>4. CASE ReadReq2
-            <3> SUFFICES ASSUME TypeOK, ReadReq2 PROVE messages' \in SUBSET MessagesType
-                            /\ processorTimestamps' \in [Processors -> Nat]
-                            /\ processorValues' \in [Processors -> Values \cup {Default}]
-                            /\ lastTimestamp' \in Nat
-                            /\ lastOperationNumber' \in Nat
-            BY <2>2 DEF TypeOK, Next, vars
-            <3>1. messages' \in SUBSET MessagesType PROOF BY <2>4 DEF TypeOK, Next, ReadReq2, SendWriteReq
-            <3>2. processorTimestamps' \in [Processors -> Nat] PROOF BY <2>4 DEF TypeOK, Next, ReadReq2, SendWriteReq
-            <3>3. processorValues' \in [Processors -> Values \cup {Default}] PROOF BY <2>4 DEF TypeOK, Next, ReadReq2, SendWriteReq
-            <3>4. lastTimestamp' \in Nat PROOF BY <2>4 DEF TypeOK, Next, ReadReq2, SendWriteReq
-            <3>5. lastOperationNumber' \in Nat PROOF BY <2>4 DEF TypeOK, Next, ReadReq2, SendWriteReq
-            <3>q. QED BY <3>1, <3>2, <3>3, <3>4, <3>5
-        
-        <2>5. CASE AckWriteReq BY <2>5 DEF AckWriteReq, TypeOK, MessagesType, SendAckWReq
-        <2>6. CASE AckReadReq BY <2>6 DEF AckReadReq, TypeOK, MessagesType, SendAckRReq
-        
-        <2>q. QED BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6 DEF TypeOK, Next, WriteReq1, WriteReq2, ReadReq1, ReadReq2, AckWriteReq, AckReadReq        
-        
-    <1>q. QED BY <1>1, <1>2, PTL DEF Spec
-
-*)
     
 (*
 THEOREM SpecTypeOK == Spec => []TypeOK
